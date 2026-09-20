@@ -1,0 +1,66 @@
+# Unity's generated folders: rebuilt from Assets and ProjectSettings.
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+.vs/
+.utmp/
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+.DS_Store
+
+# Gaussian splatting: private, under NDA. The player, its shader, the hand
+# grab that drives it and the offline converter stay out of this repository,
+# so the rest of the piece can be versioned without them. The project will not
+# compile from a fresh clone until they are put back by hand.
+Assets/Scripts/VFX/SplatSequencePlayer.cs
+Assets/Scripts/VFX/SplatSequencePlayer.cs.meta
+Assets/Scripts/VFX/SplatHandGrab.cs
+Assets/Scripts/VFX/SplatHandGrab.cs.meta
+Assets/Shaders/GaussianSplats.shader
+Assets/Shaders/GaussianSplats.shader.meta
+Tools/SplatSequence/
+
+# Captures and converted sequences live outside the project, in
+# ../IMETINHUMAN_Media, and are pushed to the headset over USB.
+
+# The dark-room reflection drives the splat player and mirrors its splats, so
+# it belongs with the private work rather than here.
+Assets/Scripts/VFX/DarkRoom.cs
+Assets/Scripts/VFX/DarkRoom.cs.meta
+
+# Media: models, captures, audio and video are large and live with the artist,
+# not in version control. Code, shaders, scenes and project settings only.
+Assets/Humobox/
+Assets/Video/
+Assets/Audio/
+Assets/Environment/
+*.fbx
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.hdr
+*.exr
+*.png
+*.jpg
+*.jpeg
+*.tga
+*.psd
