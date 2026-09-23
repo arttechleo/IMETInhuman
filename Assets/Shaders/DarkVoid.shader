@@ -30,7 +30,9 @@ Shader "IMETINHUMAN/VFX/Dark Void"
             Name "Void"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend SrcAlpha OneMinusSrcAlpha
+            // Alpha accumulates, so the dark reaches a full one and takes
+            // the room away rather than half-veiling it.
+            Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
             ZWrite On
             ZTest LEqual
             Cull Front          // seen from the inside

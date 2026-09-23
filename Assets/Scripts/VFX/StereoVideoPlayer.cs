@@ -77,6 +77,13 @@ namespace ImetInHuman.VFX
         bool placed;
         bool started;
 
+        /// <summary>
+        /// Placed once and left there: no gliding back into view when the head
+        /// turns away. For showing the capture to someone while talking about
+        /// it, where a picture that moves on its own is a distraction.
+        /// </summary>
+        public bool Pinned { get; set; }
+
         public string EffectName => "Stereo video";
 
         public float Duration
@@ -225,7 +232,8 @@ namespace ImetInHuman.VFX
             if (placed && Camera.main != null)
             {
                 // In view, still in the room, gliding back only if lost from view.
-                view.Follow(Camera.main.transform, distance, followAngle, glideSeconds);
+                if (!Pinned)
+                    view.Follow(Camera.main.transform, distance, followAngle, glideSeconds);
                 stage = view.Pose;
                 if (boxes != null)
                     Follow(started ? (int)player.frame : firstFrame);

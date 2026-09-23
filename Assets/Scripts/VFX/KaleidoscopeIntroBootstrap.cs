@@ -135,7 +135,8 @@ namespace ImetInHuman.VFX
                 if (HandTesting)
                     splatSequence.Loop = true;
 
-                // Pinch to move, turn and resize the capture, whenever it is up.
+                // Pinch to move, turn and resize the capture. Switched off
+                // for the locked chapters, where the hands do nothing.
                 if (GetComponent<SplatHandGrab>() == null)
                     gameObject.AddComponent<SplatHandGrab>();
 
@@ -177,7 +178,14 @@ namespace ImetInHuman.VFX
         }
 
         /// <summary>The pieces the start menu can play on their own.</summary>
-        public enum Chapter { Everything, Shorts, Rain, Humobox, Splats, Stereo, DarkRoom }
+        public enum Chapter
+        {
+            Everything, Shorts, Rain, Humobox,
+            Splats, Stereo, DarkRoom,
+            // Nothing responds to the hands, and nothing follows the head: the
+            // captures stand where they are put while they are talked about.
+            SplatsLocked, StereoLocked
+        }
 
         /// <summary>True while any part of the piece is still running.</summary>
         public bool Playing =>
@@ -199,6 +207,14 @@ namespace ImetInHuman.VFX
             var dark = GetComponent<DarkRoom>();
             if (dark != null)
                 dark.Active = chapter is Chapter.Everything or Chapter.DarkRoom;
+
+            // Locked chapters are for talking over: hands do nothing to the
+            // capture, and it never glides back into view by itself.
+            var locked = chapter is Chapter.SplatsLocked or Chapter.StereoLocked;
+            foreach (var grab in GetComponents<SplatHandGrab>())
+                grab.enabled = !locked;
+            if (stereoVideo != null)
+                stereoVideo.Pinned = locked;
 
             switch (chapter)
             {
@@ -240,6 +256,7 @@ namespace ImetInHuman.VFX
                     break;
 
                 case Chapter.Splats:
+                case Chapter.SplatsLocked:
                 case Chapter.DarkRoom:
                     if (splatSequence == null)
                         break;
@@ -247,6 +264,7 @@ namespace ImetInHuman.VFX
                     break;
 
                 case Chapter.Stereo:
+                case Chapter.StereoLocked:
                     if (stereoVideo != null)
                         stereoVideo.PlayFromStart();
                     break;

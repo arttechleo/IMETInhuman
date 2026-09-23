@@ -732,10 +732,15 @@ Shader "IMETINHUMAN/VFX/Rain Window PBR Overlay"
                 // lifts towards a milky, room-lit grey. Every drop is a clear lens
                 // through it and a running drop wipes a clear track, so the rain
                 // keeps playing on top however much of the pane has fogged.
-                if (_FogCoverage > 0.001h)
+                // Not on the floor and ceiling: breath fogs the glass you stand
+                // against, and a fogged cap reads as a lid over the booth --
+                // worse, the panorama holds nothing for straight down, so the
+                // film there is flat grey with no room behind it.
+                half fogHere = _FogCoverage * (1.0h - saturate(_Horizontal));
+                if (fogHere > 0.001h)
                 {
                     float aspect = sx / sy;
-                    float threshold = FogThreshold(_FogCoverage);
+                    float threshold = FogThreshold(fogHere);
                     float g = FogField(input.uv, aspect);
                     half fog = (half)(1.0 - smoothstep(threshold - _FogEdge, threshold + _FogEdge, g));
 
@@ -820,9 +825,13 @@ Shader "IMETINHUMAN/VFX/Rain Window PBR Overlay"
                         half3 paneEnv = envSpec;
                     #endif
 
+                    // Underfoot and overhead the glass is quieter: smudges read
+                    // as dirt on a lid from there, and the room they would catch
+                    // is not in the panorama anyway.
+                    half quiet = lerp(1.0h, 0.35h, saturate(_Horizontal));
                     half3 glassColor = (paneEnv * sheen * _GlassReflect
-                                        + (paneEnv * 0.3h + ambient * 0.5h) * smudge) * _GlassTint.rgb;
-                    half glassAlpha = saturate((sheen * _GlassReflect * 0.8h + smudge) * _GlassPresence);
+                                        + (paneEnv * 0.3h + ambient * 0.5h) * smudge) * _GlassTint.rgb * quiet;
+                    half glassAlpha = saturate((sheen * _GlassReflect * 0.8h + smudge) * _GlassPresence * quiet);
 
                     // Glass is the bottom layer: water and fog sit on it.
                     premul += glassColor * glassAlpha * (1.0h - surfaceAlpha);

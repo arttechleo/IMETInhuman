@@ -342,15 +342,15 @@ bool IMH_RunnerHead(float lane, float seed, float elapsed, float baseSpeed,
             if (beadVolume[b] <= 0.0)
                 continue;
 
-            float beadSpeed = baseSpeed * min(pow(radius / baseRadius, 1.5), 6.0);
+            float beadSpeed = baseSpeed * min(pow(max(radius, 0.0) / max(baseRadius, 1e-5), 1.5), 6.0);
             if (IMH_RunnerAdvance(headY, timeLeft, beadY[b], beadSpeed))
                 return true;
 
             volume += beadVolume[b];
-            radius = pow(volume, 1.0 / 3.0);
+            radius = pow(max(volume, 0.0), 1.0 / 3.0);
         }
 
-        float rowSpeed = baseSpeed * min(pow(radius / baseRadius, 1.5), 6.0);
+        float rowSpeed = baseSpeed * min(pow(max(radius, 0.0) / max(baseRadius, 1e-5), 1.5), 6.0);
         if (IMH_RunnerAdvance(headY, timeLeft, row * rowHeight, rowSpeed))
             return true;
     }

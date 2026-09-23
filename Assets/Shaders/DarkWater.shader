@@ -1,23 +1,38 @@
 Shader "IMETINHUMAN/VFX/Dark Water"
 {
-    // The shallow water the figure stands on in the dark: black, still, and
-    // only there at all because of what moves on it.
+    // The shallow water the figure stands in, lit as water actually is.
     //
-    // Nothing is lit here -- there is no light in the void -- so the surface is
-    // read purely from its ripples: the faint sheen they turn towards the eye,
-    // and the ring that spreads from where the figure stands. The reflection
-    // itself is drawn under this surface by the splats (GaussianSplats.shader
-    // with _Mirror), so this pass only tints and dims what shows through.
+    // Water is a dielectric: it reflects about 2% of what meets it head-on and
+    // nearly all of it at a grazing angle. That one fact is the whole look.
+    // Straight down at your feet the surface is black and the reflection barely
+    // registers; further out, where the surface is seen edge-on, the reflection
+    // takes over and the pool turns to a mirror. Get that curve right and the
+    // eye reads water without being told.
+    //
+    // So this pass is not the reflection -- the splats draw that underneath,
+    // upside down -- it is the water ON TOP of it: black, at an alpha of
+    // 1 - F, letting exactly the reflected fraction through. Over that goes a
+    // GGX highlight on the ripples, the one thing in the void with a light of
+    // its own, and the ring spreading from where the figure stands.
+    //
+    // The same reckoning as the raindrops (RainWindowPbrOverlay): Schlick
+    // Fresnel on an F0 of 0.02, GGX for the highlight, and a roughness that
+    // grows with distance, so far water scatters where near water mirrors.
     Properties
     {
         _Alpha ("Runtime Alpha", Range(0, 1)) = 1
-        _WaterColor ("Water", Color) = (0.008, 0.013, 0.016, 1)
-        _Sheen ("Sheen", Range(0, 2)) = 0.5
-        _SheenColor ("Sheen Colour", Color) = (0.45, 0.62, 0.68, 1)
+        _Deep ("Deep Water", Color) = (0.004, 0.008, 0.011, 1)
+        _Roughness ("Surface Roughness", Range(0.002, 0.6)) = 0.02
+        [Tooltip] _F0 ("Reflectance Head-On", Range(0.02, 0.2)) = 0.055
+        _KeyLight ("Key Light Colour", Color) = (0.55, 0.72, 0.85, 1)
+        _KeyDirection ("Key Light Direction", Vector) = (0.3, 0.85, -0.45, 0)
+        _KeyStrength ("Key Light Strength", Range(0, 8)) = 1.1
         _RippleScale ("Ripple Size", Float) = 2.6
         _RippleSpeed ("Ripple Speed", Range(0, 4)) = 0.9
-        _Fade ("Fade Out Over Metres", Float) = 5
-        _Rings ("Rings From The Figure", Range(0, 1)) = 0.6
+        _RippleSteepness ("Ripple Steepness", Range(0, 0.4)) = 0.018
+        _MirrorGain ("Mirror Gain (stylised)", Range(1, 24)) = 5
+        _Fade ("Mirror Fades Out Over Metres", Float) = 9
+        _Rings ("Rings From The Figure", Range(0, 1)) = 0.18
         _FigureXZ ("Figure Position (xz)", Vector) = (0, 0, 0, 0)
     }
 
@@ -37,7 +52,12 @@ Shader "IMETINHUMAN/VFX/Dark Water"
             Name "Water"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend SrcAlpha OneMinusSrcAlpha
+            // Colour blends as usual; alpha accumulates instead of being mixed.
+            // Plain SrcAlpha blending pulls the destination alpha DOWN (0.55
+            // over 1 leaves 0.75), and the headset shows the real room wherever
+            // alpha is under one -- which is why the room came back through the
+            // water while the sky above it stayed black.
+            Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
             ZWrite Off
             ZTest LEqual
             Cull Back
@@ -52,11 +72,16 @@ Shader "IMETINHUMAN/VFX/Dark Water"
 
             CBUFFER_START(UnityPerMaterial)
                 half  _Alpha;
-                half4 _WaterColor;
-                half  _Sheen;
-                half4 _SheenColor;
+                half4 _Deep;
+                half  _Roughness;
+                half  _F0;
+                half4 _KeyLight;
+                float4 _KeyDirection;
+                half  _KeyStrength;
+                half  _MirrorGain;
                 float _RippleScale;
                 float _RippleSpeed;
+                float _RippleSteepness;
                 float _Fade;
                 half  _Rings;
                 float4 _FigureXZ;
@@ -85,8 +110,9 @@ Shader "IMETINHUMAN/VFX/Dark Water"
                 return output;
             }
 
-            // Slope of the surface at a point: the same two waves the reflection
-            // is swayed by, plus rings spreading from where the figure stands.
+            // Slope of the surface: two crossing swells, and rings spreading
+            // from where the figure stands. The same waves the reflection below
+            // is swayed by, so surface and reflection move together.
             float2 Slope(float2 p)
             {
                 float t = _Time.y * _RippleSpeed;
@@ -98,36 +124,77 @@ Shader "IMETINHUMAN/VFX/Dark Water"
                 float r = length(toFigure);
                 if (_Rings > 0.001h && r > 1e-3)
                 {
-                    // Rings that spread outwards and die away with distance.
                     float ring = cos(r * 9.0 - t * 3.0) * exp(-r * 0.7);
                     slope += normalize(toFigure) * ring * _Rings * 2.0;
                 }
-                return slope * 0.06;
+                return slope * _RippleSteepness;
+            }
+
+            // GGX: the spread of microfacet slopes, which is what makes a
+            // highlight on water a long streak rather than a dot.
+            half SpecularGGX(half3 n, half3 v, half3 l, half roughness)
+            {
+                half3 h = SafeNormalize(v + l);
+                half ndh = saturate(dot(n, h));
+                half ndv = saturate(dot(n, v)) + 1e-4h;
+                half ndl = saturate(dot(n, l));
+                half a = max(roughness * roughness, 1e-3h);
+                half a2 = a * a;
+                half d = ndh * ndh * (a2 - 1.0h) + 1.0h;
+                half distribution = a2 / max(3.14159h * d * d, 1e-5h);
+                // Smith visibility, the usual fast approximation.
+                half gv = ndl * (ndv * (1.0h - a) + a);
+                half gl = ndv * (ndl * (1.0h - a) + a);
+                half visibility = 0.5h / max(gv + gl, 1e-5h);
+                return distribution * visibility * ndl;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                float3 view = normalize(GetCameraPositionWS() - input.positionWS);
+                float3 toEye = GetCameraPositionWS() - input.positionWS;
+                half3 v = (half3)normalize(toEye);
                 float2 slope = Slope(input.positionWS.xz);
-                float3 normalWS = normalize(float3(-slope.x, 1.0, -slope.y));
+                half3 n = (half3)normalize(float3(-slope.x, 1.0, -slope.y));
 
-                // No light to reflect, so the sheen is the grazing angle alone:
-                // where the ripples tip towards the eye, the surface shows.
-                half ndv = (half)saturate(dot(normalWS, view));
-                half grazing = pow(1.0h - ndv, 4.0h);
-                half tilt = (half)saturate(length(slope) * 6.0);
-                half3 sheen = _SheenColor.rgb * _Sheen * (grazing * 0.6h + tilt * grazing * 1.4h);
+                // Schlick. Water is 2% head-on; a polished dark floor, which is
+                // what the reference actually is, runs nearer 5-6%, and that is
+                // the difference between a reflection you have to look for and
+                // one that reads at a glance.
+                half ndv = saturate(dot(n, v));
+                half fresnel = _F0 + (1.0h - _F0) * pow(1.0h - ndv, 5.0h);
 
-                // The pool ends in the dark rather than at an edge.
-                float away = length(input.positionWS.xz - GetCameraPositionWS().xz);
+                // Rougher with distance: a far pixel holds many ripples, and
+                // what it reflects is scattered rather than mirrored.
+                float away = length(toEye);
+                half roughness = saturate(_Roughness + (half)(away * 0.006));
+
+                // The mirror holds near the figure and gives out with distance,
+                // so the pool ends in the dark rather than at an edge.
                 half reach = (half)saturate(1.0 - away / max(_Fade, 0.5));
 
-                half3 color = _WaterColor.rgb + sheen;
-                // Opaque underfoot, clearing towards the dark: the reflection
-                // shows through where the water is thinnest.
-                half alpha = saturate((0.55h + grazing * 0.35h) * reach) * _Alpha;
+                // Physically, standing over your own reflection you would
+                // barely see it: a few percent at this angle. The reference
+                // shot gets its mirror from a camera almost on the surface,
+                // which a viewer standing in the room cannot have. So the
+                // Fresnel curve is kept -- faint underfoot, rising outwards,
+                // which is what reads as water -- and lifted bodily by a gain.
+                // One honest exaggeration rather than a fake reflection.
+                half mirror = saturate(fresnel * _MirrorGain) * reach;
+
+                // The highlight dies with the reflection. Left to run to the
+                // horizon it draws a bright rim right round the pool, which
+                // reads as a lid on the dark -- the one thing the reference
+                // never shows. Only the water near the figure catches light.
+                half3 l = (half3)normalize(_KeyDirection.xyz);
+                half3 highlight = _KeyLight.rgb * _KeyStrength
+                                  * SpecularGGX(n, v, l, roughness) * fresnel * reach;
+
+                // Black water over the reflection, letting the reflected
+                // fraction through: colour = reflection * F + deep * (1 - F).
+                half3 color = _Deep.rgb + highlight;
+                half alpha = saturate(1.0h - mirror) * _Alpha;
                 return half4(color, alpha);
             }
             ENDHLSL

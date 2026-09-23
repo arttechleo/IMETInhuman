@@ -45,7 +45,7 @@ namespace ImetInHuman.VFX
         [SerializeField] float stopGestureSeconds = 0.6f;
 
         const int PanelPixels = 700;      // the panel's width in layout pixels
-        const int ButtonPixels = 104;
+        const int ButtonPixels = 88;
         const int GapPixels = 14;
         const int TitlePixels = 96;
 
@@ -59,6 +59,8 @@ namespace ImetInHuman.VFX
             ("PLY sequence", KaleidoscopeIntroBootstrap.Chapter.Splats),
             ("Stereo video", KaleidoscopeIntroBootstrap.Chapter.Stereo),
             ("Dark room", KaleidoscopeIntroBootstrap.Chapter.DarkRoom),
+            ("PLY \u2013 locked", KaleidoscopeIntroBootstrap.Chapter.SplatsLocked),
+            ("Stereo \u2013 locked", KaleidoscopeIntroBootstrap.Chapter.StereoLocked),
         };
 
         static readonly List<XRHandSubsystem> subsystems = new();
@@ -158,13 +160,15 @@ namespace ImetInHuman.VFX
             var fillObject = new GameObject("Fill", typeof(RectTransform));
             var fillRect = (RectTransform)fillObject.transform;
             fillRect.SetParent(rect, false);
+            // The fill grows by its right anchor, not by its scale. A scale of
+            // zero leaves the transform's matrix degenerate, and Unity asserts
+            // on it -- 'IsNormalized(dir, 0.0001f)' -- once per fill per frame.
             fillRect.anchorMin = new Vector2(0f, 0f);
-            fillRect.anchorMax = new Vector2(1f, 1f);
+            fillRect.anchorMax = new Vector2(0f, 1f);
             fillRect.offsetMin = Vector2.zero;
             fillRect.offsetMax = Vector2.zero;
             fillRect.pivot = new Vector2(0f, 0.5f);
             fillObject.AddComponent<Image>().color = new Color(0.3f, 0.72f, 0.52f, 0.85f);
-            fillRect.localScale = new Vector3(0f, 1f, 1f);
             fills.Add(fillRect);
 
             Label(rect, font, text, headline ? 52 : 44, Color.white, rect.sizeDelta, Vector2.zero);
@@ -207,8 +211,10 @@ namespace ImetInHuman.VFX
             for (var i = 0; i < fills.Count; i++)
             {
                 var wanted = i == hovered ? 1f : 0f;
-                var amount = Mathf.MoveTowards(fills[i].localScale.x, wanted, Time.deltaTime * 6f);
-                fills[i].localScale = new Vector3(amount, 1f, 1f);
+                var amount = Mathf.MoveTowards(fills[i].anchorMax.x, wanted, Time.deltaTime * 6f);
+                fills[i].anchorMax = new Vector2(amount, 1f);
+                fills[i].offsetMin = Vector2.zero;
+                fills[i].offsetMax = Vector2.zero;
             }
         }
 
@@ -355,7 +361,11 @@ namespace ImetInHuman.VFX
                 panel.SetPositionAndRotation(eye.position + eye.forward * distance,
                                              Quaternion.LookRotation(Flat(eye.forward), Vector3.up));
             foreach (var fill in fills)
-                fill.localScale = new Vector3(0f, 1f, 1f);
+            {
+                fill.anchorMax = new Vector2(0f, 1f);
+                fill.offsetMin = Vector2.zero;
+                fill.offsetMax = Vector2.zero;
+            }
             panel.gameObject.SetActive(true);
         }
 
