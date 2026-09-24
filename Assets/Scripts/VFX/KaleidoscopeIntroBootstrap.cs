@@ -39,6 +39,8 @@ namespace ImetInHuman.VFX
         [SerializeField] bool playRain = true;
         [Tooltip("After the rain: a Gaussian-splat .ply sequence, frame by frame, no interpolation.")]
         [SerializeField] bool playSplatSequence = true;
+        [Tooltip("Media folder of Luke's capture, played by the same splat player as its own chapter.")]
+        [SerializeField] string lukeFolder = "LukeSeq";
         [Tooltip("With the splats: the room goes dark and the capture stands on water, reflected.")]
         [SerializeField] bool darkRoom = true;
         [Tooltip("After the splats: the side-by-side stereo video with alpha.")]
@@ -184,7 +186,9 @@ namespace ImetInHuman.VFX
             Splats, Stereo, DarkRoom,
             // Nothing responds to the hands, and nothing follows the head: the
             // captures stand where they are put while they are talked about.
-            SplatsLocked, StereoLocked
+            SplatsLocked, StereoLocked,
+            // Luke's interview capture, with his voice.
+            Luke
         }
 
         /// <summary>True while any part of the piece is still running.</summary>
@@ -203,6 +207,11 @@ namespace ImetInHuman.VFX
         public void Play(Chapter chapter)
         {
             StopEverything();
+
+            // Luke's capture has a chapter of its own; everything else plays
+            // the sequence set on the player.
+            if (splatSequence != null)
+                splatSequence.UseFolder(chapter == Chapter.Luke ? lukeFolder : null);
 
             var dark = GetComponent<DarkRoom>();
             if (dark != null)
@@ -258,6 +267,7 @@ namespace ImetInHuman.VFX
                 case Chapter.Splats:
                 case Chapter.SplatsLocked:
                 case Chapter.DarkRoom:
+                case Chapter.Luke:
                     if (splatSequence == null)
                         break;
                     splatSequence.PlayFromStart();

@@ -57,6 +57,7 @@ namespace ImetInHuman.VFX
             ("Raindrops", KaleidoscopeIntroBootstrap.Chapter.Rain),
             ("Humobox", KaleidoscopeIntroBootstrap.Chapter.Humobox),
             ("PLY sequence", KaleidoscopeIntroBootstrap.Chapter.Splats),
+            ("Luke sequence", KaleidoscopeIntroBootstrap.Chapter.Luke),
             ("Stereo video", KaleidoscopeIntroBootstrap.Chapter.Stereo),
             ("Dark room", KaleidoscopeIntroBootstrap.Chapter.DarkRoom),
             ("PLY \u2013 locked", KaleidoscopeIntroBootstrap.Chapter.SplatsLocked),
