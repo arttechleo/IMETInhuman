@@ -53,11 +53,18 @@ namespace ImetInHuman.VFX
         static readonly (string label, KaleidoscopeIntroBootstrap.Chapter chapter)[] Chapters =
         {
             ("Full experience", KaleidoscopeIntroBootstrap.Chapter.Everything),
+            ("Intro: Pilot", KaleidoscopeIntroBootstrap.Chapter.Pilot),
+            ("Full: Pilot sequence", KaleidoscopeIntroBootstrap.Chapter.PilotSequence),
+            ("Test: resonance", KaleidoscopeIntroBootstrap.Chapter.ResonanceTest),
             ("Scrolling shorts", KaleidoscopeIntroBootstrap.Chapter.Shorts),
             ("Raindrops", KaleidoscopeIntroBootstrap.Chapter.Rain),
             ("Humobox", KaleidoscopeIntroBootstrap.Chapter.Humobox),
             ("PLY sequence", KaleidoscopeIntroBootstrap.Chapter.Splats),
             ("Luke sequence", KaleidoscopeIntroBootstrap.Chapter.Luke),
+            ("Luke Experimental", KaleidoscopeIntroBootstrap.Chapter.LukeExperimental),
+            ("Luke test: stage jump", KaleidoscopeIntroBootstrap.Chapter.LukeStage),
+            ("Luke test: seat + interview", KaleidoscopeIntroBootstrap.Chapter.LukeSeatInterview),
+            ("Luke test: seat finder", KaleidoscopeIntroBootstrap.Chapter.LukeSeatDebug),
             ("Stereo video", KaleidoscopeIntroBootstrap.Chapter.Stereo),
             ("Dark room", KaleidoscopeIntroBootstrap.Chapter.DarkRoom),
             ("PLY \u2013 locked", KaleidoscopeIntroBootstrap.Chapter.SplatsLocked),
@@ -103,10 +110,14 @@ namespace ImetInHuman.VFX
             canvas.renderMode = RenderMode.WorldSpace;
 
             var rect = (RectTransform)go.transform;
-            var height = TitlePixels + Chapters.Length * (ButtonPixels + GapPixels) + GapPixels;
-            rect.sizeDelta = new Vector2(PanelPixels, height);
+            // Past eight chapters, two columns: one tall column would run out
+            // of the view at arm's length. Each column a little narrower.
+            var columns = Chapters.Length > 8 ? 2 : 1;
+            var rows = (Chapters.Length + columns - 1) / columns;
+            var height = TitlePixels + rows * (ButtonPixels + GapPixels) + GapPixels;
+            rect.sizeDelta = new Vector2(PanelPixels * columns, height);
             // Pixels to metres, once, on the whole panel.
-            rect.localScale = Vector3.one * (width / PanelPixels);
+            rect.localScale = Vector3.one * (width * (columns == 1 ? 1f : 0.7f) / PanelPixels);
 
             // The built-in font is not always in a player; the headset's own is.
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
@@ -116,12 +127,15 @@ namespace ImetInHuman.VFX
 
             var top = height * 0.5f;
             Label(rect, font, "IMETINHUMAN", 46, new Color(1f, 1f, 1f, 0.8f),
-                  new Vector2(PanelPixels, 70), new Vector2(0f, top - TitlePixels * 0.5f));
+                  new Vector2(PanelPixels * columns, 70), new Vector2(0f, top - TitlePixels * 0.5f));
 
             for (var i = 0; i < Chapters.Length; i++)
             {
-                var y = top - TitlePixels - GapPixels - (ButtonPixels + GapPixels) * i - ButtonPixels * 0.5f;
-                Button(rect, font, Chapters[i].label, new Vector2(0f, y), i == 0);
+                var row = i % rows;
+                var column = i / rows;
+                var x = columns == 1 ? 0f : (column - 0.5f) * PanelPixels;
+                var y = top - TitlePixels - GapPixels - (ButtonPixels + GapPixels) * row - ButtonPixels * 0.5f;
+                Button(rect, font, Chapters[i].label, new Vector2(x, y), i == 0);
             }
             Debug.Log($"Start menu: {Chapters.Length} chapters; reach out and pinch one.", this);
         }
@@ -176,10 +190,55 @@ namespace ImetInHuman.VFX
             buttons.Add(rect);
         }
 
+        /// <summary>
+        /// A string extra the app was launched with, for testing from a desk:
+        /// adb shell am start -n space.liminal.imetinhuman/com.unity3d.player.UnityPlayerGameActivity --es chapter LukeStage
+        /// Null in the Editor or when absent.
+        /// </summary>
+        public static string LaunchExtra(string name)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = player.GetStatic<AndroidJavaObject>("currentActivity");
+                using var intent = activity.Call<AndroidJavaObject>("getIntent");
+                return intent?.Call<string>("getStringExtra", name);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Start menu: cannot read launch extra {name}: {e.Message}");
+            }
+#endif
+            return null;
+        }
+
+        bool launchChecked;
+
+        // Chooses the chapter named by the launch extra "chapter", once.
+        void ChooseFromLaunch()
+        {
+            if (launchChecked || Time.time < 2f)
+                return;
+            launchChecked = true;
+            var wanted = LaunchExtra("chapter");
+            if (string.IsNullOrEmpty(wanted))
+                return;
+            for (var i = 0; i < Chapters.Length; i++)
+                if (Chapters[i].chapter.ToString() == wanted || Chapters[i].label == wanted)
+                {
+                    Debug.Log($"Start menu: launched straight into {Chapters[i].label}.", this);
+                    Choose(i);
+                    return;
+                }
+            Debug.LogWarning($"Start menu: no chapter called {wanted}.", this);
+        }
+
         void Update()
         {
             if (panel == null)
                 return;
+            ChooseFromLaunch();
 
             // Back again once the chapter has played itself out, or on a
             // thumbs up to cut it short.

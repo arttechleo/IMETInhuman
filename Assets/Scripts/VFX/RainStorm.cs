@@ -30,7 +30,7 @@ namespace ImetInHuman.VFX
         [SerializeField] float roofSplashRate = 140f;
 
         [Header("Sound")]
-        [SerializeField, Range(0f, 1f)] float volume = 0.35f;
+        [SerializeField, Range(0f, 1f)] float volume = 0.06f;   // ~-31 LUFS (0.35 measured -15.6 LUFS)
         [Tooltip("Storm volume while the Humobox speaks, as a share of normal, so its voice carries.")]
         [SerializeField, Range(0f, 1f)] float duckForVoice = 0.12f;
         [Tooltip("Single drops ticking on the glass, per second.")]
@@ -182,7 +182,7 @@ namespace ImetInHuman.VFX
                 streakMaterial.SetFloat(Ids.Intensity, Mathf.Clamp01(intensity * 1.5f));
             if (ringMaterial != null)
                 ringMaterial.SetFloat(Ids.Intensity, Mathf.Clamp01(intensity * 1.5f));
-            audioGain = volume * intensity * (HumoboxRainCue.Speaking ? duckForVoice : 1f);
+            audioGain = volume * intensity * (HumoboxRainCue.Speaking || HumoboxPilot.Speaking ? duckForVoice : 1f);
         }
 
         static void SetRate(ParticleSystem system, float rate)

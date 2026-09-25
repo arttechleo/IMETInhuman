@@ -300,7 +300,7 @@ namespace ImetInHuman.VFX
                 source.playOnAwake = false;
                 source.loop = true;
                 source.spatialBlend = spatialBlend;
-                source.minDistance = 0.3f;
+                source.minDistance = 0.6f;   // full level at the hand-held phone (audio levelled 2026-09-24: clips -22 LUFS)
                 source.rolloffMode = AudioRolloffMode.Logarithmic;
                 source.volume = 0f;
                 voices[i] = source;

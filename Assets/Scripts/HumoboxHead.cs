@@ -35,6 +35,9 @@ public class HumoboxHead : MonoBehaviour
     public float slideAmount = 0.35f;     // slides toward the turn (model units)
     public float tiltDegrees = 25.8f;     // at headRoll = 1
     public bool invertYaw, invertRoll, invertSpin;
+    [Tooltip("The box faces the way this pivot is turned, every frame, instead of keeping the " +
+             "world facing it had when it woke. For a box that is carried around (the pilot).")]
+    public bool followPivotRotation;
 
     Curves _c;
     Transform _align, _stretch, _spin;
@@ -84,6 +87,7 @@ public class HumoboxHead : MonoBehaviour
         float yaw = Sample(_c?.headYaw, t) * (invertYaw ? -1 : 1);
         float roll = Sample(_c?.headRoll, t) * (invertRoll ? -1 : 1);
         float spin = Sample(_c?.spin, t) * (invertSpin ? -1 : 1);
+        if (followPivotRotation) _baseRotation = transform.rotation;
 
         // Align: +Z points from the viewer to the box (flattened), so +X is the viewer's right.
         // It only orients the stretch/tilt axes; the Spin node undoes the heading so the box

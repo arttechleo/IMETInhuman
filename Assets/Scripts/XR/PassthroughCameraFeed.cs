@@ -116,12 +116,80 @@ namespace ImetInHuman.XR
             });
         }
 
-        void OnEnable() => Application.onBeforeRender += PublishPose;
+        void OnEnable()
+        {
+            Application.onBeforeRender += PublishPose;
+            if (metaAccess != null)
+                metaAccess.gameObject.SetActive(true);
+        }
 
         void OnDisable()
         {
             Application.onBeforeRender -= PublishPose;
             Shader.SetGlobalFloat(Ids.Ready, 0f);
+            // Paused (the seat finder borrows the camera): let go of it.
+            if (metaAccess != null)
+                metaAccess.gameObject.SetActive(false);
+        }
+
+        // ---- Fallback: Meta's own camera API ------------------------------------
+        // Since the Meta XR SDK joined the project its OpenXR feature can hold the
+        // passthrough camera, and a WebCamTexture on the same camera then never
+        // gets a frame -- silently, which left the rain with no room (dark drops).
+        // Meta's PassthroughCameraAccess shares the camera properly and hands over
+        // the exact pose each frame was taken from.
+        Meta.XR.PassthroughCameraAccess metaAccess;
+        bool usingMeta;
+        [Tooltip("Seconds to wait for WebCamTexture frames before switching to Meta's camera API.")]
+        [SerializeField] float webCamTimeout = 4f;
+
+        void StartMeta(string why)
+        {
+            if (usingMeta)
+                return;
+            usingMeta = true;
+            Debug.LogWarning($"Passthrough camera: {why}; switching to Meta PassthroughCameraAccess.", this);
+            if (texture != null)
+            {
+                texture.Stop();
+                Destroy(texture);
+                texture = null;
+            }
+            var go = new GameObject("Passthrough Camera (Meta)");
+            go.transform.SetParent(transform, false);
+            metaAccess = go.AddComponent<Meta.XR.PassthroughCameraAccess>();
+            metaAccess.CameraPosition = Meta.XR.PassthroughCameraAccess.CameraPositionType.Left;
+            metaAccess.RequestedResolution = new Vector2Int(1280, 960);
+        }
+
+        // The Meta camera's image, pose and projection, in the same globals.
+        void PublishMeta()
+        {
+            if (metaAccess == null || !metaAccess.IsPlaying)
+                return;
+            var tex = metaAccess.GetTexture();
+            if (tex == null)
+                return;
+            if (!streaming)
+            {
+                streaming = true;
+                Debug.Log($"Passthrough camera: streaming via Meta PassthroughCameraAccess at {metaAccess.CurrentResolution.x}x{metaAccess.CurrentResolution.y}.", this);
+            }
+            Shader.SetGlobalTexture(Ids.Texture, tex);
+
+            // Camera space as Meta defines it (x right, y up, z forward, Unity axes),
+            // viewport (0,0) bottom-left over the crop of the sensor the stream shows.
+            var k = metaAccess.Intrinsics;
+            var sensor = (Vector2)k.SensorResolution;
+            var current = (Vector2)metaAccess.CurrentResolution;
+            var f = current / sensor;
+            f /= Mathf.Max(f.x, f.y);
+            var crop = new Rect(sensor.x * (1f - f.x) * 0.5f, sensor.y * (1f - f.y) * 0.5f, sensor.x * f.x, sensor.y * f.y);
+            uvFromCamera = new Vector4(k.FocalLength.x / crop.width, k.FocalLength.y / crop.height,
+                                       (k.PrincipalPoint.x - crop.x) / crop.width, (k.PrincipalPoint.y - crop.y) / crop.height);
+            var pose = metaAccess.GetCameraPose();
+            Shader.SetGlobalMatrix(Ids.WorldToCamera, Matrix4x4.TRS(pose.position, pose.rotation, Vector3.one).inverse);
+            Shader.SetGlobalVector(Ids.UvFromCamera, uvFromCamera);
         }
 
         void OnDestroy()
@@ -138,6 +206,16 @@ namespace ImetInHuman.XR
         void LateUpdate()
         {
             RecordHeadPose();
+
+            if (usingMeta)
+            {
+                PublishMeta();
+                if (streaming)
+                    ready = fadeIn > 0f ? Mathf.MoveTowards(ready, 1f, Time.deltaTime / fadeIn) : 1f;
+                Shader.SetGlobalFloat(Ids.Ready, ready);
+                PublishSettings();
+                return;
+            }
 
             if (!streaming)
                 return;
@@ -158,9 +236,15 @@ namespace ImetInHuman.XR
             // Unity only lists cameras once the permission is in place; give it a frame.
             yield return null;
 
+            if (ImetInHuman.VFX.StartMenu.LaunchExtra("ptSource") == "meta")
+            {
+                StartMeta("launched with ptSource=meta");
+                yield break;
+            }
+
             if (!FindCamera(out var cameraId, out var index))
             {
-                Debug.LogWarning("Passthrough camera: no Meta passthrough camera found. Needs a Quest 3 or 3S on Horizon OS v74 or later.", this);
+                StartMeta("no passthrough camera in Camera2");
                 yield break;
             }
 
@@ -177,8 +261,17 @@ namespace ImetInHuman.XR
             texture = new WebCamTexture(devices[index].name, size.x, size.y);
             texture.Play();
 
+            var waited = 0f;
             while (texture.width <= 16)
+            {
+                waited += Time.unscaledDeltaTime;
+                if (waited > webCamTimeout)
+                {
+                    StartMeta($"WebCamTexture gave no frames in {webCamTimeout:0} s (camera held elsewhere?)");
+                    yield break;
+                }
                 yield return null;
+            }
 
             ComputeUvFromCamera(cameraId);
             Shader.SetGlobalTexture(Ids.Texture, texture);
@@ -200,6 +293,11 @@ namespace ImetInHuman.XR
         // again just before rendering, so it uses the pose the frame is drawn from.
         void PublishPose()
         {
+            if (usingMeta)
+            {
+                PublishMeta();
+                return;
+            }
             if (!streaming || Camera.main == null)
                 return;
 

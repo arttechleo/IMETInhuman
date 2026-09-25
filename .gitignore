@@ -36,6 +36,8 @@ Assets/Scripts/VFX/SplatHandGrab.cs
 Assets/Scripts/VFX/SplatHandGrab.cs.meta
 Assets/Shaders/GaussianSplats.shader
 Assets/Shaders/GaussianSplats.shader.meta
+Assets/Shaders/StageDepth.shader
+Assets/Shaders/StageDepth.shader.meta
 Tools/SplatSequence/
 
 # Captures and converted sequences live outside the project, in
@@ -68,3 +70,21 @@ Assets/Environment/
 # Luke Experimental drives the splat player (seat, stage chair, jump): NDA too.
 Assets/Scripts/VFX/LukeExperimental/
 Assets/Scripts/VFX/LukeExperimental.meta
+
+# On-device ML models (downloaded from Meta samples).
+Assets/ML/
+Assets/ML.meta
+
+# Luke stage (built by LukeExperimental/ConcertStage.cs) and its seat detector: NDA.
+Assets/Shaders/ConcertCrowd.shader
+Assets/Shaders/ConcertCrowd.shader.meta
+Assets/Shaders/StageBeams.shader
+Assets/Shaders/StageBeams.shader.meta
+Assets/Shaders/StageDeck.shader
+Assets/Shaders/StageDeck.shader.meta
+Assets/Resources/LukeExperimental/
+Assets/Resources/LukeExperimental.meta
+
+# Unity crash-recovery scenes.
+Assets/_Recovery/
+Assets/_Recovery.meta

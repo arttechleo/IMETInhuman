@@ -18,12 +18,15 @@ sealed class PassthroughCameraManifest : IPostGenerateGradleAndroidProject
         "horizonos.permission.HEADSET_CAMERA",
         // Pinching the splat capture about needs the headset's hand tracking.
         "com.oculus.permission.HAND_TRACKING",
+        // Planes, the room mesh, environment depth and anchors.
+        "com.oculus.permission.USE_SCENE",
+        "com.oculus.permission.USE_ANCHOR_API",
     };
 
     // Hands are used when there are no controllers, so the app must not require them.
     static readonly string[] OptionalFeatures = { "oculus.software.handtracking" };
 
-    public int callbackOrder => 100;
+    public int callbackOrder => 100000;   // after Meta's OVRGradleGeneration (99999), which strips permissions its config does not list
 
     public void OnPostGenerateGradleAndroidProject(string unityLibraryPath)
     {

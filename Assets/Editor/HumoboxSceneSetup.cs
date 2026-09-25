@@ -20,17 +20,82 @@ using UnityEngine.Timeline;
 static class HumoboxSceneSetup
 {
     const string Root = "Assets/Humobox/";
-    const string Take = "FaceTake_004";
-    const string TimelinePath = Root + "Timelines/Humobox_" + Take + ".playable";
+    // The Humobox intro (FaceCap FaceTake_012, saved as "Intro" in Blender).
+    public const string IntroTake = "Intro";
+
+    [MenuItem("IMETINHUMAN/Humobox/Add Humobox To Rain (Intro)")]
+    public static void RunIntro() => Run(IntroTake);
 
     [MenuItem("IMETINHUMAN/Humobox/Add Humobox To Rain (Take 4)")]
-    public static void Run()
+    public static void RunTake4() => Run("FaceTake_004");
+
+    // Intro: Pilot -- the box lands in front of the viewer and follows them.
+    public const string PilotTake = "FaceTake_013";
+
+    [MenuItem("IMETINHUMAN/Humobox/Add Humobox Pilot (Take 13)")]
+    public static void RunPilot() => RunPilot(PilotTake);
+
+    public static void Run(string Take)
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
             Debug.LogWarning("Humobox setup: leave Play mode first.");
             return;
         }
+
+        foreach (var old in Object.FindObjectsByType<HumoboxRainCue>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            Undo.DestroyObjectImmediate(old.gameObject);
+
+        if (!BuildRig(Take, out var root, out var pivot, out var director, out var length))
+            return;
+
+        var cue = root.AddComponent<HumoboxRainCue>();
+        var so = new SerializedObject(cue);
+        so.FindProperty("pivot").objectReferenceValue = pivot;
+        so.FindProperty("director").objectReferenceValue = director;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        pivot.SetActive(false);
+        EditorSceneManager.MarkSceneDirty(root.scene);
+        Selection.activeGameObject = root;
+        Debug.Log($"Humobox setup: added to '{root.scene.name}', {Take} ({length:0.0}s) at rain second 15. Save the scene to keep it.", root);
+    }
+
+    /// <summary>The pilot: its own Humobox, apart from the rain's, played by the Intro: Pilot chapter.</summary>
+    public static void RunPilot(string Take)
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            Debug.LogWarning("Humobox setup: leave Play mode first.");
+            return;
+        }
+
+        foreach (var old in Object.FindObjectsByType<HumoboxPilot>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            Undo.DestroyObjectImmediate(old.gameObject);
+
+        if (!BuildRig(Take, out var root, out var pivot, out var director, out var length, "Humobox Pilot"))
+            return;
+
+        var pilot = root.AddComponent<HumoboxPilot>();
+        var so = new SerializedObject(pilot);
+        so.FindProperty("pivot").objectReferenceValue = pivot;
+        so.FindProperty("director").objectReferenceValue = director;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        pivot.SetActive(false);
+        EditorSceneManager.MarkSceneDirty(root.scene);
+        Selection.activeGameObject = root;
+        Debug.Log($"Humobox setup: pilot added to '{root.scene.name}', {Take} ({length:0.0}s). Save the scene to keep it.", root);
+    }
+
+    // Humobox (root) > HumoboxPivot (HumoboxHead, director, voice) > Humobox_Master.
+    static bool BuildRig(string Take, out GameObject root, out GameObject pivot, out PlayableDirector director,
+        out float length, string rootName = "Humobox")
+    {
+        root = pivot = null;
+        director = null;
+        length = 0f;
+        string TimelinePath = Root + "Timelines/Humobox_" + Take + ".playable";
 
         var master = AssetDatabase.LoadAssetAtPath<GameObject>(Root + "Humobox_Master.fbx");
         var clip = AssetDatabase.LoadAllAssetsAtPath(Root + "Humobox@" + Take + ".fbx")
@@ -42,19 +107,16 @@ static class HumoboxSceneSetup
         if (master == null || clip == null)
         {
             Debug.LogError($"Humobox setup: missing {(master == null ? "Humobox_Master.fbx" : "the " + Take + " clip")} under {Root}.");
-            return;
+            return false;
         }
 
         var scene = SceneManager.GetActiveScene();
 
-        foreach (var old in Object.FindObjectsByType<HumoboxRainCue>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            Undo.DestroyObjectImmediate(old.gameObject);
-
-        var root = new GameObject("Humobox");
+        root = new GameObject(rootName);
         Undo.RegisterCreatedObjectUndo(root, "Add Humobox");
         SceneManager.MoveGameObjectToScene(root, scene);
 
-        var pivot = new GameObject("HumoboxPivot");
+        pivot = new GameObject("HumoboxPivot");
         pivot.transform.SetParent(root.transform, false);
 
         var model = (GameObject)PrefabUtility.InstantiatePrefab(master, scene);
@@ -73,9 +135,9 @@ static class HumoboxSceneSetup
         audio.spatialBlend = 1f;
         audio.minDistance = 1f;
 
-        var timeline = BuildTimeline(clip, voice, out var faceTrack, out var voiceTrack);
+        var timeline = BuildTimeline(clip, voice, Take, TimelinePath, out var faceTrack, out var voiceTrack);
 
-        var director = pivot.AddComponent<PlayableDirector>();
+        director = pivot.AddComponent<PlayableDirector>();
         director.playableAsset = timeline;
         director.playOnAwake = false;
         director.extrapolationMode = DirectorWrapMode.Hold;
@@ -87,20 +149,11 @@ static class HumoboxSceneSetup
         head.director = director;
         head.headCurves = curves;
 
-        var cue = root.AddComponent<HumoboxRainCue>();
-        var so = new SerializedObject(cue);
-        so.FindProperty("pivot").objectReferenceValue = pivot;
-        so.FindProperty("director").objectReferenceValue = director;
-        so.ApplyModifiedPropertiesWithoutUndo();
-
-        pivot.SetActive(false);
-
-        EditorSceneManager.MarkSceneDirty(scene);
-        Selection.activeGameObject = root;
-        Debug.Log($"Humobox setup: added to '{scene.name}', {Take} ({clip.length:0.0}s) at rain second 15. Save the scene to keep it.", root);
+        length = clip.length;
+        return true;
     }
 
-    static TimelineAsset BuildTimeline(AnimationClip clip, AudioClip voice,
+    static TimelineAsset BuildTimeline(AnimationClip clip, AudioClip voice, string Take, string TimelinePath,
         out AnimationTrack faceTrack, out AudioTrack voiceTrack)
     {
         var folder = System.IO.Path.GetDirectoryName(TimelinePath).Replace('\\', '/');
@@ -156,11 +209,11 @@ static class HumoboxSceneSetupOnce
                 return;
             if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "IntroCopy")
             {
-                Debug.LogWarning("Humobox setup skipped: open IntroCopy and use IMETINHUMAN > Humobox > Add Humobox To Rain (Take 4).");
+                Debug.LogWarning("Humobox setup skipped: open IntroCopy and use IMETINHUMAN > Humobox > Add Humobox To Rain (Intro).");
                 return;
             }
             AssetDatabase.DeleteAsset(Marker);
-            HumoboxSceneSetup.Run();
+            HumoboxSceneSetup.RunIntro();
         };
     }
 }

@@ -15,7 +15,7 @@ using Debug = UnityEngine.Debug;
 static class MediaPush
 {
     const string MediaRoot = "../IMETINHUMAN_Media";
-    static readonly string[] Folders = { "SplatSeq", "Stereo", "LukeSeq" };
+    static readonly string[] Folders = { "SplatSeq", "Stereo", "LukeSeq", "ChairSeq", "StageSeq" };
 
     [MenuItem("IMETINHUMAN/Media/Push To Headset")]
     static void Push()
