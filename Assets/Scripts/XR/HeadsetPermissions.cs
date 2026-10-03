@@ -21,6 +21,31 @@ namespace ImetInHuman.XR
 #if UNITY_ANDROID && !UNITY_EDITOR
         static readonly Queue<(string permission, Action<bool> done)> pending = new();
         static bool asking;
+        // Which request is open: a late or doubled answer to an older one is ignored.
+        static int askToken;
+        static string askingFor;
+        static Action<bool> askingDone;
+
+        // If neither callback ever fires (the dialog torn down by a pause), the
+        // queue would wait forever and every later request with it. Back in
+        // focus with a request still open, answer it from the permission state.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void WatchFocus()
+        {
+            Application.focusChanged += async focused =>
+            {
+                if (!focused || !asking)
+                    return;
+                var token = askToken;
+                // Room for the real callback, which usually follows the focus change.
+                await System.Threading.Tasks.Task.Delay(1000);
+                if (asking && token == askToken)
+                {
+                    Debug.LogWarning($"Permission request for {askingFor} got no answer; using the current state.");
+                    Finish(token, askingFor, askingDone, Has(askingFor));
+                }
+            };
+        }
 #endif
 
         public static bool Has(string permission)
@@ -63,15 +88,21 @@ namespace ImetInHuman.XR
             }
 
             asking = true;
+            var token = ++askToken;
+            askingFor = permission;
+            askingDone = done;
             var callbacks = new PermissionCallbacks();
-            callbacks.PermissionGranted += _ => Finish(permission, done, true);
-            callbacks.PermissionDenied += _ => Finish(permission, done, false);
+            callbacks.PermissionGranted += _ => Finish(token, permission, done, true);
+            callbacks.PermissionDenied += _ => Finish(token, permission, done, false);
             Permission.RequestUserPermission(permission, callbacks);
         }
 
-        static void Finish(string permission, Action<bool> done, bool granted)
+        static void Finish(int token, string permission, Action<bool> done, bool granted)
         {
+            if (!asking || token != askToken)
+                return;
             asking = false;
+            askingDone = null;
             if (!granted)
                 Debug.LogWarning($"Permission denied: {permission}");
             done?.Invoke(granted);

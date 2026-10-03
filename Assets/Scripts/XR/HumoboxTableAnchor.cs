@@ -34,6 +34,9 @@ namespace ImetInHuman.XR
 
         ARPlane table;
         ARAnchor anchor;
+        // Taken when the table is chosen: the plane can later be merged away or
+        // removed, and reading its size then gave 0 -- a box scaled to nothing.
+        float tableShortSide;
 
         /// <summary>The anchor on the chosen table, once one is found.</summary>
         public Transform Anchor => anchor != null ? anchor.transform : null;
@@ -67,6 +70,7 @@ namespace ImetInHuman.XR
             if (table == null)
                 return;
 
+            tableShortSide = Mathf.Min(table.size.x, table.size.y);
             var surface = new GameObject("Humobox Table Anchor");
             surface.transform.SetPositionAndRotation(table.center, Quaternion.identity);
             anchor = surface.AddComponent<ARAnchor>();
@@ -81,7 +85,7 @@ namespace ImetInHuman.XR
         public bool TryGetTable(out Transform tableAnchor, out float shortSide)
         {
             tableAnchor = Anchor;
-            shortSide = table != null ? Mathf.Min(table.size.x, table.size.y) : 0f;
+            shortSide = table != null ? Mathf.Max(Mathf.Min(table.size.x, table.size.y), tableShortSide) : tableShortSide;
             return tableAnchor != null;
         }
 

@@ -110,7 +110,8 @@ namespace ImetInHuman.XR
                     return;
                 HeadsetPermissions.Request(HeadsetCameraPermission, headsetGranted =>
                 {
-                    if (headsetGranted)
+                    // The dialog can outlive us (scene change while it is up).
+                    if (headsetGranted && this != null)
                         StartCoroutine(StartStreaming());
                 });
             });
@@ -120,16 +121,29 @@ namespace ImetInHuman.XR
         {
             Application.onBeforeRender += PublishPose;
             if (metaAccess != null)
+            {
                 metaAccess.gameObject.SetActive(true);
+                // It disables itself if its camera was still taken when it last
+                // started; give it another go now.
+                metaAccess.enabled = true;
+            }
+            if (texture != null && !texture.isPlaying)
+                texture.Play();
         }
 
         void OnDisable()
         {
             Application.onBeforeRender -= PublishPose;
+            // Fades in again from nothing once frames are back: the old texture
+            // may be gone (Meta's is destroyed with its component's OnDisable).
+            ready = 0f;
             Shader.SetGlobalFloat(Ids.Ready, 0f);
-            // Paused (the seat finder borrows the camera): let go of it.
+            // Paused (the seat finder borrows the camera): let go of it -- either
+            // path, a playing WebCamTexture holds the Camera2 device open too.
             if (metaAccess != null)
                 metaAccess.gameObject.SetActive(false);
+            if (texture != null && texture.isPlaying)
+                texture.Stop();
         }
 
         // ---- Fallback: Meta's own camera API ------------------------------------
@@ -157,6 +171,10 @@ namespace ImetInHuman.XR
             }
             var go = new GameObject("Passthrough Camera (Meta)");
             go.transform.SetParent(transform, false);
+            // Coroutines keep running while the feed is paused; if the seat
+            // finder holds the camera right now, wait inactive for OnEnable.
+            if (!isActiveAndEnabled)
+                go.SetActive(false);
             metaAccess = go.AddComponent<Meta.XR.PassthroughCameraAccess>();
             metaAccess.CameraPosition = Meta.XR.PassthroughCameraAccess.CameraPositionType.Left;
             metaAccess.RequestedResolution = new Vector2Int(1280, 960);
@@ -210,8 +228,8 @@ namespace ImetInHuman.XR
             if (usingMeta)
             {
                 PublishMeta();
-                if (streaming)
-                    ready = fadeIn > 0f ? Mathf.MoveTowards(ready, 1f, Time.deltaTime / fadeIn) : 1f;
+                if (streaming && metaAccess != null && metaAccess.IsPlaying)
+                    ready =fadeIn > 0f ? Mathf.MoveTowards(ready, 1f, Time.deltaTime / fadeIn) : 1f;
                 Shader.SetGlobalFloat(Ids.Ready, ready);
                 PublishSettings();
                 return;
@@ -249,14 +267,40 @@ namespace ImetInHuman.XR
             }
 
             var devices = WebCamTexture.devices;
+            var listWait = 0f;
             while (index >= devices.Length)
             {
+                listWait += Time.unscaledDeltaTime;
+                if (listWait > webCamTimeout)
+                {
+                    StartMeta($"Camera2 camera {cameraId} never appeared in WebCamTexture.devices");
+                    yield break;
+                }
                 yield return null;
                 devices = WebCamTexture.devices;
             }
 
-            if (!ReadCalibration(cameraId, out var size))
+            bool calibrated;
+            Vector2Int size;
+            try
+            {
+                calibrated = ReadCalibration(cameraId, out size);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogException(e, this);
+                calibrated = false;
+                size = default;
+            }
+            if (!calibrated)
+            {
+                StartMeta("could not read the camera's calibration");
                 yield break;
+            }
+
+            // Paused (the seat finder holds the camera): don't open it under it.
+            while (!isActiveAndEnabled)
+                yield return null;
 
             texture = new WebCamTexture(devices[index].name, size.x, size.y);
             texture.Play();
@@ -264,7 +308,9 @@ namespace ImetInHuman.XR
             var waited = 0f;
             while (texture.width <= 16)
             {
-                waited += Time.unscaledDeltaTime;
+                // Paused time doesn't count: the texture is stopped meanwhile.
+                if (isActiveAndEnabled)
+                    waited += Time.unscaledDeltaTime;
                 if (waited > webCamTimeout)
                 {
                     StartMeta($"WebCamTexture gave no frames in {webCamTimeout:0} s (camera held elsewhere?)");

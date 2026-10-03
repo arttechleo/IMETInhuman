@@ -242,7 +242,8 @@ namespace ImetInHuman.VFX
             }
 
             var fadeIn = Mathf.Clamp01(t / Mathf.Max(fadeSeconds, 0.01f));
-            SetVisible(started && player.frame >= 0 ? fadeIn : 0f);
+            // Not before the seek to firstFrame has landed: Play starts at frame 0.
+            SetVisible(started && player.frame >= Mathf.Max(firstFrame - 1, 0) ? fadeIn : 0f);
         }
 
         void Place()
@@ -306,14 +307,23 @@ namespace ImetInHuman.VFX
                 boxes = values.GetRange(0, values.Count - values.Count % 3).ToArray();
         }
 
+        // The whole file's length, once a prepare has told us; -1 until then.
+        float clipLength = -1f;
+
         // The played range's length, from the frame range and the video's own length.
         void UpdateDuration(VideoPlayer source = null)
         {
-            var total = source != null && source.length > 0.1 ? (float)source.length : duration;
+            if (source != null && source.length > 0.1)
+                clipLength = (float)source.length;
+            // Not `duration` as the total: it is already trimmed to the frame
+            // range, and trimming it again shortened it by firstFrame/fps on
+            // every PlayFromStart (Compare mode cut each loop's tail off).
+            if (clipLength < 0f && lastFrame < 0)
+                return;
+            var total = clipLength > 0f ? clipLength : float.MaxValue;
             var start = Mathf.Max(firstFrame, 0) / videoFps;
             var end = lastFrame >= 0 ? Mathf.Min((lastFrame + 1) / videoFps, total) : total;
-            if (source != null || lastFrame >= 0)
-                duration = Mathf.Max(end - start, 0.1f);
+            duration = Mathf.Max(end - start, 0.1f);
         }
 
         void SetVisible(float value)

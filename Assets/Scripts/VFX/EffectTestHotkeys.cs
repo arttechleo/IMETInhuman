@@ -85,6 +85,10 @@ namespace ImetInHuman.VFX
                     resolved[i].StopNow();
             }
 
+            // With the start menu up, the bootstrap leaves the effects disabled
+            // (their Start never ran), and PlayFromStart alone did nothing.
+            if (resolved[index] is Behaviour behaviour && !behaviour.enabled)
+                behaviour.enabled = true;
             resolved[index].PlayFromStart();
             lastAction = $"{index + 1} {resolved[index].EffectName}";
             Debug.Log($"Effect test: playing {resolved[index].EffectName} alone.", this);

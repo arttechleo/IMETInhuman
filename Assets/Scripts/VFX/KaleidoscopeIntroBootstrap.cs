@@ -248,7 +248,21 @@ namespace ImetInHuman.VFX
         }
 
         HumoboxPilot pilot;
-        HumoboxPilot Pilot => pilot != null ? pilot : pilot = FindFirstObjectByType<HumoboxPilot>(FindObjectsInactive.Include);
+        bool pilotSearched;
+        // Searched once: Playing reads this every frame (StartMenu), and a scene
+        // without a pilot would otherwise be scanned, inactive objects too, each time.
+        HumoboxPilot Pilot
+        {
+            get
+            {
+                if (pilot == null && !pilotSearched)
+                {
+                    pilotSearched = true;
+                    pilot = FindFirstObjectByType<HumoboxPilot>(FindObjectsInactive.Include);
+                }
+                return pilot;
+            }
+        }
 
         /// <summary>
         /// Plays one chapter on its own, for looking at a single part of the

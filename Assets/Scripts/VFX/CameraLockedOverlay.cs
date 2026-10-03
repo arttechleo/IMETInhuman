@@ -163,7 +163,11 @@ namespace ImetInHuman.VFX
 
             var filter = GetComponent<MeshFilter>();
             if (filter != null)
-                filter.sharedMesh = BoothMesh.Build(boothRadius, boothHeight);
+            {
+                DestroyBuiltMeshes();
+                boothMesh = BoothMesh.Build(boothRadius, boothHeight);
+                filter.sharedMesh = boothMesh;
+            }
             transform.localScale = Vector3.one;
 
             foreach (var cap in boothCaps)
@@ -177,8 +181,25 @@ namespace ImetInHuman.VFX
             boothCaps.Add(AddCap("Rain Booth Ceiling", BoothMesh.BuildCap(boothRadius, boothHeight, true)));
         }
 
+        // Meshes built here, not the primitive quad's: destroyed on reconfigure
+        // and with the overlay, or each booth leaked its wall and caps.
+        Mesh boothMesh;
+        readonly System.Collections.Generic.List<Mesh> capMeshes = new System.Collections.Generic.List<Mesh>();
+
+        void DestroyBuiltMeshes()
+        {
+            if (boothMesh != null)
+                Destroy(boothMesh);
+            boothMesh = null;
+            foreach (var mesh in capMeshes)
+                if (mesh != null)
+                    Destroy(mesh);
+            capMeshes.Clear();
+        }
+
         MeshRenderer AddCap(string capName, Mesh mesh)
         {
+            capMeshes.Add(mesh);
             var cap = new GameObject(capName);
             cap.transform.SetParent(transform, false);
             cap.AddComponent<MeshFilter>().sharedMesh = mesh;
@@ -271,6 +292,7 @@ namespace ImetInHuman.VFX
         {
             if (runtimeMaterial != null)
                 Destroy(runtimeMaterial);
+            DestroyBuiltMeshes();
         }
 
         bool FitToCamera()

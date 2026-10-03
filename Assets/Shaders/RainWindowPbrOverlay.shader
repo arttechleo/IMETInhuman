@@ -131,9 +131,12 @@ Shader "IMETINHUMAN/VFX/Rain Window PBR Overlay"
             #pragma multi_compile_fragment _ _LIGHT_COOKIES
             #include_with_pragmas "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRenderingKeywords.hlsl"
 
-            #pragma shader_feature_local_fragment _REFRACTION
-            #pragma shader_feature_local_fragment _DISPERSION
-            #pragma shader_feature_local_fragment _WINDOW_FRAME
+            // Set from code too (RainWindowOverlayController), so multi_compile: a
+            // shader_feature variant survives only while the shader sits in Always
+            // Included, and PCVR would silently lose refraction without it.
+            #pragma multi_compile_local_fragment _ _REFRACTION
+            #pragma multi_compile_local_fragment _ _DISPERSION
+            #pragma multi_compile_local_fragment _ _WINDOW_FRAME
             // On the headset the room is only reachable through the colour camera
             // (PassthroughCameraFeed); drops refract and fog blurs that instead of
             // the opaque texture, which holds none of the room there.
@@ -808,7 +811,9 @@ Shader "IMETINHUMAN/VFX/Rain Window PBR Overlay"
                 {
                     half3 flatN = SafeNormalize(input.normalWS);
                     half ndvFlat = saturate(dot(flatN, viewDirWS)) + 1e-4h;
-                    half sheen = 0.04h + 0.96h * pow(1.0h - ndvFlat, 5.0h);
+                    // saturate: head-on, 1 - ndvFlat is -1e-4, and pow of a negative
+                    // base is NaN where half is full float (PC).
+                    half sheen = 0.04h + 0.96h * pow(saturate(1.0h - ndvFlat), 5.0h);
 
                     // Metres across the pane: streaks run down it, dust is fine
                     // and even, so both keep their size however big the booth is.

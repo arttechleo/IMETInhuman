@@ -435,7 +435,15 @@ namespace ImetInHuman.VFX
             UpdateAudio();
 
             if (material == null || overlay == null || !overlay.isActiveAndEnabled)
+            {
+                // The overlay switches itself off when the effect ends. Pause
+                // here, or the looping atlas keeps decoding (and rebuilding its
+                // mips) behind the rain and everything after it. A restart
+                // resumes it below.
+                if (player != null && player.isPlaying)
+                    player.Pause();
                 return;
+            }
 
             // The slide clock runs from the effect's own start, so the first
             // slide drops in as the effect appears and restarts restart it.
@@ -463,7 +471,11 @@ namespace ImetInHuman.VFX
             }
 
             if (!player.isPlaying)
+            {
                 player.Play();
+                // Back from a pause: don't read the paused time as a stall.
+                lastFrameChange = now;
+            }
 
             // Show footage only once frames are actually arriving. A player can
             // report prepared and playing while the render texture still holds

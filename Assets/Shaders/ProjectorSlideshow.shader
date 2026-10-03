@@ -165,7 +165,9 @@ Shader "IMETINHUMAN/VFX/Projector Slideshow"
                 float2 cell = float2(fmod(tile, grid.x), floor(tile / grid.x));
                 // Atlas row 0 is the top of the video; uv runs bottom-up.
                 cell.y = grid.y - 1.0 - cell.y;
-                float2 inset = _VideoAtlas_TexelSize.xy * 2.0 * exp2(lod) * grid;
+                // Capped at the tile centre: at the whole-tile mip the inset is 2.0, and
+                // clamp(x, 2, -1) returned -1 -- the neighbouring clip's colour.
+                float2 inset = min(_VideoAtlas_TexelSize.xy * 2.0 * exp2(lod) * grid, 0.5);
                 local = clamp(local, inset, 1.0 - inset);
                 return SAMPLE_TEXTURE2D_LOD(_VideoAtlas, sampler_VideoAtlas, (cell + local) / grid, lod).rgb;
             }

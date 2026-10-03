@@ -118,6 +118,9 @@ namespace ImetInHuman.VFX
 
             HeadsetPermissions.Request(ScenePermission, granted =>
             {
+                // The dialog can outlive us; OnDestroy has cleaned up by then.
+                if (this == null)
+                    return;
                 if (granted)
                 {
                     managerObject.SetActive(true);
@@ -439,7 +442,15 @@ namespace ImetInHuman.VFX
         void OnDestroy()
         {
             if (meshManager != null)
+            {
                 meshManager.meshInfosChanged.RemoveListener(OnMeshesChanged);
+                // Parented to the XR Origin, not to us: it would keep meshing.
+                Destroy(meshManager.gameObject);
+            }
+            // The plane manager is the scene's and outlives us; a later plane
+            // update would otherwise call into a destroyed component.
+            if (planeManager != null)
+                planeManager.trackablesChanged.RemoveListener(OnPlanesChanged);
             if (material != null) Destroy(material);
             if (albedo != null) Destroy(albedo);
             if (normal != null) Destroy(normal);

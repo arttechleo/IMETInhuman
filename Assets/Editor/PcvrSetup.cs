@@ -16,6 +16,10 @@ using UnityEngine.XR.OpenXR;
 ///            reflects the scene, so the rain has a world to refract.
 ///   XR       OpenXR as the Windows loader (it had none) with the Quest
 ///            controller profiles; Quest Link must be the PC's OpenXR runtime.
+///   Quality  a "PC" quality level on PC_RPAsset (opaque and depth textures for
+///            the rain), Windows only; "Mobile" stays Android only, and the
+///            default pipeline is the Mobile one so Android builds stop carrying
+///            PC variants. ImetInHuman.XR.PcvrSetup switches to "PC" off-Android.
 /// </summary>
 static class PcvrSetupEditor
 {
@@ -29,6 +33,62 @@ static class PcvrSetupEditor
     {
         SetUpSky();
         SetUpXr();
+        SetUpQuality();
+        AssetDatabase.SaveAssets();
+    }
+
+    const string PcPipeline = "Assets/Settings/PC_RPAsset.asset";
+    const string MobilePipeline = "Assets/Settings/Mobile_RPAsset.asset";
+
+    [MenuItem("IMETINHUMAN/PCVR/Set Up Quality Levels")]
+    public static void SetUpQuality()
+    {
+        var pc = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(PcPipeline);
+        var mobile = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(MobilePipeline);
+        if (pc == null || mobile == null)
+        {
+            Debug.LogWarning($"PCVR setup: {PcPipeline} or {MobilePipeline} is missing; quality levels left alone.");
+            return;
+        }
+
+        var quality = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset")[0]);
+        var levels = quality.FindProperty("m_QualitySettings");
+        int pcIndex = -1, mobileIndex = -1;
+        for (var i = 0; i < levels.arraySize; i++)
+        {
+            var name = levels.GetArrayElementAtIndex(i).FindPropertyRelative("name").stringValue;
+            if (name == "PC") pcIndex = i;
+            if (name == "Mobile") mobileIndex = i;
+        }
+        if (mobileIndex < 0)
+        {
+            Debug.LogWarning("PCVR setup: no \"Mobile\" quality level to base \"PC\" on; quality levels left alone.");
+            return;
+        }
+
+        if (pcIndex < 0)
+        {
+            // A copy of Mobile, after it (levels run low to high).
+            levels.InsertArrayElementAtIndex(mobileIndex);
+            pcIndex = mobileIndex + 1;
+            var level = levels.GetArrayElementAtIndex(pcIndex);
+            level.FindPropertyRelative("name").stringValue = "PC";
+            level.FindPropertyRelative("customRenderPipeline").objectReferenceValue = pc;
+            var excluded = level.FindPropertyRelative("excludedTargetPlatforms");
+            excluded.ClearArray();
+            excluded.InsertArrayElementAtIndex(0);
+            excluded.GetArrayElementAtIndex(0).stringValue = "Android";
+            quality.ApplyModifiedPropertiesWithoutUndo();
+            Debug.Log("PCVR setup: added the \"PC\" quality level (PC_RPAsset, Windows only).");
+        }
+
+        // The fallback pipeline is also what build stripping keeps variants for;
+        // with PC as the default, Android builds carried Forward+, SSAO and the rest.
+        if (GraphicsSettings.defaultRenderPipeline != mobile)
+        {
+            GraphicsSettings.defaultRenderPipeline = mobile;
+            Debug.Log("PCVR setup: default render pipeline is now Mobile_RPAsset.");
+        }
         AssetDatabase.SaveAssets();
     }
 
@@ -103,6 +163,26 @@ static class PcvrSetupEditor
             EditorUtility.SetDirty(openXr);
         }
         Debug.Log("PCVR setup: OpenXR on for Windows. Set Meta Quest Link as the PC's OpenXR runtime.");
+    }
+}
+
+/// <summary>Adds the PC quality level once on the next refresh, then deletes its marker.</summary>
+[InitializeOnLoad]
+static class PcvrQualityOnce
+{
+    const string Self = "Assets/Editor/PcvrQualityOnce.run";
+
+    static PcvrQualityOnce()
+    {
+        if (!System.IO.File.Exists(Self))
+            return;
+        EditorApplication.delayCall += () =>
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+            AssetDatabase.DeleteAsset(Self);
+            PcvrSetupEditor.SetUpQuality();
+        };
     }
 }
 

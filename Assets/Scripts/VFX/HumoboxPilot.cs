@@ -205,6 +205,10 @@ namespace ImetInHuman.VFX
 
             if (director != null)
             {
+                // The end is judged by time (TakeDone), which only works if the
+                // director holds its last frame; with wrap None it would reset to
+                // 0 and the pilot would never leave.
+                director.extrapolationMode = DirectorWrapMode.Hold;
                 director.time = 0;
                 director.Play();
             }
@@ -233,6 +237,9 @@ namespace ImetInHuman.VFX
             Speaking = false;
             Enter(State.Off);
         }
+
+        // Static, so a pilot disabled mid-take would otherwise keep the rain ducked.
+        void OnDisable() => Speaking = false;
 
         void Enter(State s)
         {

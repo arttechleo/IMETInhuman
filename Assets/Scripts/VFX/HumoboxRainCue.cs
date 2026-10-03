@@ -112,11 +112,17 @@ namespace ImetInHuman.VFX
             pivot.transform.localScale = Vector3.one;
         }
 
-        void OnDestroy() => Speaking = false;
+        // OnDisable runs before OnDestroy too, so this covers both.
+        void OnDisable() => Speaking = false;
 
         void Update()
         {
-            if (shown && director != null && director.state != PlayState.Playing && director.time >= director.duration - 0.05)
+            // Judged by time: with wrap mode Hold the director still reports
+            // Playing at its end (HumoboxPilot hit the same thing), so a state
+            // check alone never saw the take finish. Stopped covers wrap None.
+            var takeDone = shown && director != null
+                && (director.time >= director.duration - 0.05 || director.state != PlayState.Playing);
+            if (takeDone)
                 Speaking = false;
 
             if (rain == null)

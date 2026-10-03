@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -94,6 +95,13 @@ namespace ImetInHuman.VFX
             if (!showing || mirror == null || target == null || Camera.main == null)
                 return;
 
+            // Render on even frames only; the room capture takes the odd ones, so
+            // the two extra passes never land in the same frame.
+            var renderNow = Time.frameCount % Mathf.Max(everyNthFrame, 1) == 0;
+            mirror.enabled = renderNow;
+            if (!renderNow)
+                return;
+
             // From the head, straight at the Humobox, just wide enough for it.
             var eye = Camera.main.transform.position;
             var bounds = WorldBounds(target);
@@ -101,13 +109,6 @@ namespace ImetInHuman.VFX
             var distance = Mathf.Max(toTarget.magnitude, 0.1f);
             var radius = bounds.extents.magnitude * framing;
             var halfAngle = Mathf.Asin(Mathf.Clamp(radius / distance, 0.01f, 0.98f)) * Mathf.Rad2Deg;
-
-            // Render on even frames only; the room capture takes the odd ones, so
-            // the two extra passes never land in the same frame.
-            var renderNow = Time.frameCount % Mathf.Max(everyNthFrame, 1) == 0;
-            mirror.enabled = renderNow;
-            if (!renderNow)
-                return;
 
             mirror.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(toTarget / distance, Vector3.up));
             mirror.fieldOfView = Mathf.Clamp(halfAngle * 2f, 5f, 150f);
@@ -121,10 +122,14 @@ namespace ImetInHuman.VFX
             Shader.SetGlobalFloat(Ids.Ready, 1f);
         }
 
-        static Bounds WorldBounds(Transform root)
+        // Reused: GetComponentsInChildren into a list allocates nothing once it
+        // has grown, where the array overload made garbage every frame.
+        readonly List<Renderer> renderers = new List<Renderer>();
+
+        Bounds WorldBounds(Transform root)
         {
-            var renderers = root.GetComponentsInChildren<Renderer>();
-            if (renderers.Length == 0)
+            root.GetComponentsInChildren(renderers);
+            if (renderers.Count == 0)
                 return new Bounds(root.position, Vector3.one * 0.3f);
             var bounds = renderers[0].bounds;
             foreach (var r in renderers)

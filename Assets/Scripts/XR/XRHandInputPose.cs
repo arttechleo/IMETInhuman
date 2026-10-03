@@ -17,26 +17,39 @@ namespace ImetInHuman.XR
 
         InputAction positionAction;
         InputAction rotationAction;
+        InputAction trackedAction;
 
         void OnEnable()
         {
             var handTag = hand == Handedness.Left ? "{LeftHand}" : "{RightHand}";
             positionAction = new InputAction($"{hand} Hand Position", binding: $"<XRHandDevice>{handTag}/devicePosition");
             rotationAction = new InputAction($"{hand} Hand Rotation", binding: $"<XRHandDevice>{handTag}/deviceRotation");
+            trackedAction = new InputAction($"{hand} Hand Tracked", binding: $"<XRHandDevice>{handTag}/isTracked");
             positionAction.Enable();
             rotationAction.Enable();
+            trackedAction.Enable();
         }
 
         void OnDisable()
         {
             positionAction?.Dispose();
             rotationAction?.Dispose();
+            trackedAction?.Dispose();
             positionAction = null;
             rotationAction = null;
+            trackedAction = null;
         }
 
         void Update()
         {
+            // A hand device stays bound after the hand is lost; its pose then
+            // reads stale or zero. Hold the last pose until it is tracked again.
+            // (No isTracked control bound: trust the pose, as before.)
+            if (positionAction != null && positionAction.controls.Count > 0
+                && trackedAction != null && trackedAction.controls.Count > 0
+                && trackedAction.ReadValue<float>() < 0.5f)
+                return;
+
             var trackedPosition = positionAction != null && positionAction.controls.Count > 0;
             var trackedRotation = rotationAction != null && rotationAction.controls.Count > 0;
 

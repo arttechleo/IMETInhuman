@@ -368,7 +368,11 @@ namespace ImetInHuman.VFX
             if (target == null)
                 return;
 
-            UpdateRunners(target);
+            // Not while waiting on the start delay (the whole Shorts chapter in
+            // the full sequence): runners are a pure function of Time.time, so
+            // skipping frames loses nothing, and the walk is costly on the CPU.
+            if (overlay.PlaybackTime >= 0f)
+                UpdateRunners(target);
 
             if (!condensation)
                 return;
